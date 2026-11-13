@@ -24,7 +24,9 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 
 EXPOSE 8080
 
+# The aspnet image ships neither wget nor curl, so the probe uses bash's
+# /dev/tcp to open the socket and read the response.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
+  CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /health HTTP/1.0\r\n\r\n" >&3 && grep -q 200 <&3' || exit 1
 
 ENTRYPOINT ["dotnet", "OrderFlow.Api.dll"]

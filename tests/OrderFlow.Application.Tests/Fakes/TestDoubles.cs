@@ -30,6 +30,14 @@ internal sealed class InMemoryOrderRepository : IOrderRepository
     public Task<Order?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
         => Task.FromResult(_orders.SingleOrDefault(order => order.Id == id));
 
+    public Task<Order?> GetByExternalReferenceAsync(
+        string externalReference,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_orders.SingleOrDefault(
+            order => order.ExternalReference == externalReference));
+    }
+
     public Task<IReadOnlyList<Order>> ListAsync(
         OrderStatus? status,
         int skip,

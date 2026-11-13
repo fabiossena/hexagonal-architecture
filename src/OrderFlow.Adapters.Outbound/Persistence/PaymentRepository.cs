@@ -44,6 +44,22 @@ public sealed class PaymentRepository : IPaymentRepository
     }
 
     /// <inheritdoc />
+    public async Task<Payment?> GetByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return null;
+        }
+
+        var normalized = idempotencyKey.Trim();
+
+        return await _dbContext.Payments
+            .FirstOrDefaultAsync(payment => payment.IdempotencyKey == normalized, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Payment>> ListAsync(
         Guid? orderId,
         PaymentProvider? provider,

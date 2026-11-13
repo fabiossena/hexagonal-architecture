@@ -75,7 +75,8 @@ public sealed class OrdersController : ControllerBase
         var command = new PlaceOrderCommand(
             request.CustomerId,
             items,
-            request.Currency ?? Money.DefaultCurrency);
+            request.Currency ?? Money.DefaultCurrency,
+            request.ExternalReference);
 
         var order = await _placeOrder.ExecuteAsync(command, cancellationToken);
 

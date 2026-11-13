@@ -4,6 +4,7 @@ using OrderFlow.Adapters.Inbound;
 using OrderFlow.Adapters.Outbound;
 using OrderFlow.Adapters.Outbound.Persistence;
 using OrderFlow.Application;
+using OrderFlow.Integration.IAppForms;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,10 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 //   Domain / Application  -> framework-free
 //   Adapters.Inbound      -> HTTP controllers
 //   Adapters.Outbound     -> EF Core + PostgreSQL, system clock, payment providers
+//   Integration.IAppForms -> iAppForms compatibility surface (anti-corruption)
 // ---------------------------------------------------------------------------
 builder.Services.AddApplication();
 builder.Services.AddInboundAdapters();
 builder.Services.AddOutboundAdapters(builder.Configuration);
+builder.Services.AddIAppFormsIntegration(builder.Configuration);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -25,7 +28,8 @@ builder.Services.AddSwaggerGen(options =>
         Title = "OrderFlow Payment API",
         Version = "v1",
         Description = "Order payment service built with Hexagonal Architecture (Ports & Adapters). " +
-                      "Supports Stripe, Mercado Pago, Asaas and an offline simulator."
+                      "Supports Stripe, Mercado Pago, Asaas and an offline simulator. " +
+                      "Exposes an iAppForms-compatible checkout surface at /api/checkout."
     });
 });
 

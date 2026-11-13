@@ -22,6 +22,12 @@ public interface IOrderRepository
     /// <returns>The order, or <c>null</c> when it does not exist.</returns>
     Task<Order?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>Loads an order by its reference in an external system.</summary>
+    /// <param name="externalReference">External reference (for example a quote id).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The order, or <c>null</c> when it does not exist.</returns>
+    Task<Order?> GetByExternalReferenceAsync(string externalReference, CancellationToken cancellationToken);
+
     /// <summary>Lists orders, newest first.</summary>
     /// <param name="status">Optional status filter.</param>
     /// <param name="skip">Number of rows to skip.</param>

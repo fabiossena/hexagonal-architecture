@@ -40,6 +40,9 @@ public sealed class Payment
     /// <summary>Maximum length accepted for the raw provider payload.</summary>
     public const int MaxProviderPayloadLength = 8000;
 
+    /// <summary>Maximum length accepted for the idempotency key.</summary>
+    public const int MaxIdempotencyKeyLength = 200;
+
     // Required by EF Core materialization.
     private Payment()
     {
@@ -53,7 +56,8 @@ public sealed class Payment
         Money amount,
         string description,
         string? customerEmail,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        string? idempotencyKey = null)
     {
         Id = id;
         OrderId = orderId;
@@ -62,6 +66,7 @@ public sealed class Payment
         Amount = amount;
         Description = description;
         CustomerEmail = customerEmail;
+        IdempotencyKey = idempotencyKey;
         Status = PaymentStatus.Pending;
         CreatedAtUtc = createdAtUtc;
         UpdatedAtUtc = createdAtUtc;
@@ -90,6 +95,15 @@ public sealed class Payment
 
     /// <summary>Gets the customer e-mail used for the charge.</summary>
     public string? CustomerEmail { get; private set; }
+
+    /// <summary>
+    /// Gets the idempotency key that created this payment (optional).
+    /// </summary>
+    /// <remarks>
+    /// Replaying the same key returns the very same payment instead of charging
+    /// the customer twice — the key is unique in the store.
+    /// </remarks>
+    public string? IdempotencyKey { get; private set; }
 
     /// <summary>Gets the identifier assigned by the provider, when known.</summary>
     public string? ProviderPaymentId { get; private set; }
@@ -146,6 +160,7 @@ public sealed class Payment
     /// <param name="description">Description shown to the customer.</param>
     /// <param name="customerEmail">Customer e-mail (optional).</param>
     /// <param name="nowUtc">Current UTC instant, supplied by the application layer (<c>IClock</c>).</param>
+    /// <param name="idempotencyKey">Key that identifies the operation (optional, unique).</param>
     /// <returns>A new pending <see cref="Payment"/>.</returns>
     /// <exception cref="ValidationException">The data is invalid or the provider does not accept the method.</exception>
     public static Payment Create(
@@ -155,7 +170,8 @@ public sealed class Payment
         Money amount,
         string description,
         string? customerEmail,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        string? idempotencyKey = null)
     {
         if (orderId == Guid.Empty)
         {
@@ -190,7 +206,8 @@ public sealed class Payment
             amount,
             normalizedDescription,
             normalizedEmail,
-            nowUtc);
+            nowUtc,
+            NormalizeIdempotencyKey(idempotencyKey));
     }
 
     /// <summary>
@@ -454,6 +471,24 @@ public sealed class Payment
         if (normalized.Length > MaxCustomerEmailLength)
         {
             throw new ValidationException($"The customer e-mail must be at most {MaxCustomerEmailLength} characters.");
+        }
+
+        return normalized;
+    }
+
+    private static string? NormalizeIdempotencyKey(string? idempotencyKey)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return null;
+        }
+
+        var normalized = idempotencyKey.Trim();
+
+        if (normalized.Length > MaxIdempotencyKeyLength)
+        {
+            throw new ValidationException(
+                $"The idempotency key must be at most {MaxIdempotencyKeyLength} characters.");
         }
 
         return normalized;

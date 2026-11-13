@@ -107,6 +107,19 @@
     .log .ok { color: var(--ok); } .log .err { color: var(--err); }
     .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 4px; }
     .check input { width: auto; }
+    .tabs { display: flex; gap: 6px; padding: 10px 16px 0; max-width: 1500px; margin: 0 auto; }
+    .tab {
+      background: transparent; border: 1px solid var(--line); border-bottom: none;
+      color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 16px; font-size: 13px; font-weight: 600;
+    }
+    .tab.active { background: var(--card); color: var(--accent); border-color: var(--accent); }
+    .tab-panel { display: grid; gap: 14px; padding: 16px; max-width: 1500px; margin: 0 auto; }
+    .tab-panel[hidden] { display: none; }
+    @media (min-width: 1100px) { .tab-panel { grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.15fr); align-items: start; } }
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+      background: #0b1220; border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; color: var(--violet);
+    }
   </style>
 </head>
 <body>
@@ -117,6 +130,12 @@
     <span class="badge" id="api-status">connecting…</span>
   </header>
 
+  <div class="tabs">
+    <button class="tab active" data-tab="native">Native API</button>
+    <button class="tab" data-tab="compat">iAppForms compatibility</button>
+  </div>
+
+  <div class="tab-panel" id="tab-native">
   <main>
     <!-- ------------------------------------------------------------------ -->
     <section class="card">
@@ -213,6 +232,80 @@
       </div>
     </section>
   </main>
+  </div>
+
+  <!-- ------------------------------------------------------------------ -->
+  <div class="tab-panel" id="tab-compat" hidden>
+    <section class="card">
+      <h2>iAppForms · checkout surface</h2>
+      <div class="hint" style="margin-bottom:12px">
+        The quote is an OrderFlow <b>order</b> whose <code>externalReference</code> is the
+        <span class="code">quoteId</span>. The iAppForms module calls
+        <span class="code">POST /api/checkout/payments</span> with the
+        <span class="code">Idempotency-Key</span> header — replaying the key never charges twice.
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="c-quote">Quote id (quoteId)</label>
+          <input id="c-quote" placeholder="created by the button below" />
+        </div>
+        <div>
+          <label for="c-method">Payment method code</label>
+          <select id="c-method">
+            <option value="Pix">Pix</option>
+            <option value="CreditCard">CreditCard</option>
+            <option value="DebitCard">DebitCard</option>
+            <option value="Boleto">Boleto</option>
+            <option value="BankTransfer">BankTransfer</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="c-key">Idempotency-Key</label>
+          <input id="c-key" />
+        </div>
+        <div>
+          <label for="c-apikey">X-Api-Key</label>
+          <input id="c-apikey" placeholder="empty = open (dev)" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="c-amount">Quote amount (BRL)</label>
+          <input id="c-amount" type="number" step="0.01" min="0.01" value="199.90" />
+        </div>
+        <div>
+          <label for="c-webhook">Webhook provider</label>
+          <select id="c-webhook">
+            <option value="Simulated">Simulated</option>
+            <option value="Stripe">Stripe</option>
+            <option value="MercadoPago">MercadoPago</option>
+            <option value="Asaas">Asaas</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="c-quote-btn">1 · Create quote (order)</button>
+        <button id="c-pay-btn">2 · POST /api/checkout/payments</button>
+        <button class="ghost" id="c-status-btn">3 · GET status</button>
+        <button class="ghost" id="c-webhook-btn">4 · POST webhook</button>
+      </div>
+      <div class="err-text" id="c-error"></div>
+    </section>
+
+    <section class="card">
+      <h2>iAppForms · answer</h2>
+      <div id="c-result"><div class="empty">Nothing called yet.</div></div>
+
+      <h3>Raw answer</h3>
+      <pre id="c-raw">—</pre>
+    </section>
+  </div>
 
   <script>
     const state = {
@@ -542,6 +635,176 @@
     $('new-order').addEventListener('click', createTestOrder);
     $('pay').addEventListener('click', chargePayment);
     $('reload').addEventListener('click', loadPayments);
+
+    // ----------------------------------------------------------------------
+    // Tabs
+    // ----------------------------------------------------------------------
+    document.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((other) => other.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach((panel) => (panel.hidden = true));
+        tab.classList.add('active');
+        $(`tab-${tab.dataset.tab}`).hidden = false;
+      });
+    });
+
+    // ----------------------------------------------------------------------
+    // iAppForms compatibility surface
+    // ----------------------------------------------------------------------
+    const compat = { paymentId: null };
+
+    function compatHeaders(extra) {
+      const headers = { 'Accept': 'application/json', ...(extra || {}) };
+      const apiKey = $('c-apikey').value.trim();
+      if (apiKey) headers['X-Api-Key'] = apiKey;
+      return headers;
+    }
+
+    async function compatCall(method, url, body, extraHeaders) {
+      const started = Date.now();
+      const options = { method, headers: compatHeaders(extraHeaders) };
+      if (body !== undefined) {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let payload = null;
+      try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
+      const ms = Date.now() - started;
+
+      log(`${method} ${url} → ${response.status} (${ms} ms)`, response.ok ? 'ok' : 'err');
+      $('c-raw').textContent = JSON.stringify(payload, null, 2);
+      return { ok: response.ok, status: response.status, payload };
+    }
+
+    function renderCompat(payload) {
+      const box = $('c-result');
+      box.innerHTML = '';
+
+      const details = document.createElement('dl');
+      details.className = 'kv';
+
+      const rows = Object.entries(payload).map(([key, value]) => [
+        key,
+        value === null || value === undefined
+          ? '—'
+          : (typeof value === 'object' ? JSON.stringify(value) : String(value))
+      ]);
+
+      rows.forEach(([key, value]) => {
+        const dt = document.createElement('dt');
+        dt.textContent = key;
+        const dd = document.createElement('dd');
+        dd.textContent = value;
+        details.appendChild(dt);
+        details.appendChild(dd);
+      });
+
+      box.appendChild(details);
+    }
+
+    async function createQuote() {
+      $('c-error').textContent = '';
+      const quoteId = crypto.randomUUID();
+      const amount = Number($('c-amount').value) || 0;
+
+      const order = await compatCall('POST', '/api/orders', {
+        customerId: crypto.randomUUID(),
+        currency: 'BRL',
+        externalReference: quoteId,
+        items: [{ productName: 'iAppForms quote', quantity: 1, unitPrice: amount }]
+      });
+
+      if (!order.ok) {
+        $('c-error').textContent = `Could not create the quote: ${order.payload.detail || order.payload.title}`;
+        return;
+      }
+
+      const confirm = await compatCall('POST', `/api/orders/${order.payload.id}/confirm`);
+      if (!confirm.ok) {
+        $('c-error').textContent = `Could not confirm the quote: ${confirm.payload.detail || confirm.payload.title}`;
+        return;
+      }
+
+      $('c-quote').value = quoteId;
+      $('c-key').value = `idem-${quoteId.slice(0, 8)}`;
+      $('c-error').textContent = '';
+      log(`quote ${quoteId} created (order ${order.payload.id})`, 'ok');
+    }
+
+    async function compatPay() {
+      $('c-error').textContent = '';
+      const quoteId = $('c-quote').value.trim();
+      if (!quoteId) {
+        $('c-error').textContent = 'Create a quote first (button 1).';
+        return;
+      }
+
+      const result = await compatCall(
+        'POST',
+        '/api/checkout/payments',
+        { quoteId: quoteId, paymentMethodCode: $('c-method').value, recurring: false },
+        { 'Idempotency-Key': $('c-key').value.trim() || undefined });
+
+      if (!result.ok) {
+        const code = result.payload.code ? ` [${result.payload.code}]` : '';
+        $('c-error').textContent = `${result.status}${code} — ${result.payload.detail || result.payload.title}`;
+        return;
+      }
+
+      compat.paymentId = result.payload.paymentId;
+      renderCompat(result.payload);
+    }
+
+    async function compatStatus() {
+      $('c-error').textContent = '';
+      if (!compat.paymentId) {
+        $('c-error').textContent = 'Charge a quote first (button 2).';
+        return;
+      }
+
+      const result = await compatCall('GET', `/api/checkout/payments/${compat.paymentId}`);
+      if (!result.ok) {
+        $('c-error').textContent = `${result.status} — ${result.payload.detail || result.payload.title}`;
+        return;
+      }
+
+      renderCompat(result.payload);
+    }
+
+    async function compatWebhook() {
+      $('c-error').textContent = '';
+      const provider = $('c-webhook').value;
+
+      const payments = await compatCall('GET', '/api/payments?size=1');
+      const latest = payments.ok && payments.payload.items && payments.payload.items[0];
+      const providerPaymentId = latest ? latest.providerPaymentId : null;
+
+      if (!providerPaymentId) {
+        $('c-error').textContent = 'No payment with a provider reference yet.';
+        return;
+      }
+
+      const body = provider === 'Asaas'
+        ? { payment: { id: providerPaymentId, status: 'CONFIRMED' } }
+        : { id: providerPaymentId, status: 'approved' };
+
+      const result = await compatCall('POST', `/api/checkout/webhooks/${provider}`, body);
+      if (!result.ok) {
+        $('c-error').textContent = `${result.status} — ${result.payload.detail || result.payload.title}`;
+        return;
+      }
+
+      renderCompat(result.payload);
+      await compatStatus();
+    }
+
+    $('c-quote-btn').addEventListener('click', createQuote);
+    $('c-pay-btn').addEventListener('click', compatPay);
+    $('c-status-btn').addEventListener('click', compatStatus);
+    $('c-webhook-btn').addEventListener('click', compatWebhook);
 
     loadProviders().then(loadPayments);
   </script>

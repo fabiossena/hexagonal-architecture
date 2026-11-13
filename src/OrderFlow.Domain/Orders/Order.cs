@@ -26,6 +26,16 @@ namespace OrderFlow.Domain.Orders;
 /// </remarks>
 public sealed class Order
 {
+    /// <summary>
+    /// Maximum length accepted for the external reference.
+    /// </summary>
+    /// <remarks>
+    /// The external reference links the order to a quote/contract living in
+    /// another system (for example the iAppForms <c>quoteId</c>), so an
+    /// integration can find the order without knowing its internal identity.
+    /// </remarks>
+    public const int MaxExternalReferenceLength = 200;
+
     private readonly List<OrderItem> _items = new();
 
     // Required by EF Core materialization.
@@ -38,6 +48,11 @@ public sealed class Order
 
     /// <summary>Gets the customer that placed the order.</summary>
     public Guid CustomerId { get; private set; }
+
+    /// <summary>
+    /// Gets the reference of this order in the external system (optional).
+    /// </summary>
+    public string? ExternalReference { get; private set; }
 
     /// <summary>Gets the current lifecycle status.</summary>
     public OrderStatus Status { get; private set; }
@@ -74,9 +89,10 @@ public sealed class Order
     /// </summary>
     /// <param name="customerId">Customer identity.</param>
     /// <param name="nowUtc">Current UTC instant, supplied by the application layer (<c>IClock</c>).</param>
+    /// <param name="externalReference">Optional reference of this order in an external system.</param>
     /// <returns>A new draft <see cref="Order"/>.</returns>
     /// <exception cref="ValidationException">The customer is empty or the instant is not UTC.</exception>
-    public static Order Create(Guid customerId, DateTime nowUtc)
+    public static Order Create(Guid customerId, DateTime nowUtc, string? externalReference = null)
     {
         if (customerId == Guid.Empty)
         {
@@ -92,6 +108,7 @@ public sealed class Order
         {
             Id = Guid.NewGuid(),
             CustomerId = customerId,
+            ExternalReference = NormalizeExternalReference(externalReference),
             Status = OrderStatus.Draft,
             CreatedAtUtc = nowUtc
         };
@@ -196,6 +213,24 @@ public sealed class Order
         {
             throw new ConflictException($"Cannot {operation} because the order is {Status}.");
         }
+    }
+
+    private static string? NormalizeExternalReference(string? externalReference)
+    {
+        if (string.IsNullOrWhiteSpace(externalReference))
+        {
+            return null;
+        }
+
+        var normalized = externalReference.Trim();
+
+        if (normalized.Length > MaxExternalReferenceLength)
+        {
+            throw new ValidationException(
+                $"The external reference must be at most {MaxExternalReferenceLength} characters.");
+        }
+
+        return normalized;
     }
 
     private static DateTime EnsureUtc(DateTime value)

@@ -9,6 +9,7 @@ namespace OrderFlow.Application.Dtos;
 /// <param name="Status">Current status.</param>
 /// <param name="Description">Description sent to the provider.</param>
 /// <param name="CustomerEmail">Customer e-mail.</param>
+/// <param name="IdempotencyKey">Key that created the payment (optional).</param>
 /// <param name="ProviderPaymentId">Identifier assigned by the provider.</param>
 /// <param name="ProviderStatus">Raw provider status.</param>
 /// <param name="CheckoutUrl">Hosted checkout URL, when the provider returns one.</param>
@@ -22,6 +23,9 @@ namespace OrderFlow.Application.Dtos;
 /// <param name="PaidAtUtc">Capture instant (UTC), when applicable.</param>
 /// <param name="CancelledAtUtc">Cancellation instant (UTC), when applicable.</param>
 /// <param name="ProviderPayload">Raw provider payload, kept for debugging.</param>
+/// <param name="Reused">
+/// <c>true</c> when the payment already existed and the idempotency key replayed it.
+/// </param>
 public sealed record PaymentDto(
     Guid Id,
     Guid OrderId,
@@ -31,6 +35,7 @@ public sealed record PaymentDto(
     string Status,
     string Description,
     string? CustomerEmail,
+    string? IdempotencyKey,
     string? ProviderPaymentId,
     string? ProviderStatus,
     string? CheckoutUrl,
@@ -43,4 +48,5 @@ public sealed record PaymentDto(
     DateTime UpdatedAtUtc,
     DateTime? PaidAtUtc,
     DateTime? CancelledAtUtc,
-    string? ProviderPayload);
+    string? ProviderPayload,
+    bool Reused = false);

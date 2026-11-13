@@ -48,7 +48,7 @@ public sealed class PlaceOrderUseCase
             throw new ValidationException("An order must contain at least one item.");
         }
 
-        var order = Order.Create(command.CustomerId, _clock.UtcNow);
+        var order = Order.Create(command.CustomerId, _clock.UtcNow, command.ExternalReference);
 
         foreach (var item in command.Items)
         {

@@ -28,6 +28,7 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasMaxLength(Payment.MaxDescriptionLength)
             .IsRequired();
         builder.Property(payment => payment.CustomerEmail).HasMaxLength(Payment.MaxCustomerEmailLength);
+        builder.Property(payment => payment.IdempotencyKey).HasMaxLength(Payment.MaxIdempotencyKeyLength);
         builder.Property(payment => payment.ProviderPaymentId).HasMaxLength(Payment.MaxProviderReferenceLength);
         builder.Property(payment => payment.ProviderStatus).HasMaxLength(Payment.MaxProviderReferenceLength);
         builder.Property(payment => payment.CheckoutUrl).HasMaxLength(1000);
@@ -61,5 +62,11 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasIndex(payment => payment.OrderId);
         builder.HasIndex(payment => payment.ProviderPaymentId);
+
+        // The idempotency key identifies the operation: it must be unique so a
+        // replay can never create a second charge.
+        builder.HasIndex(payment => payment.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("\"IdempotencyKey\" IS NOT NULL");
     }
 }

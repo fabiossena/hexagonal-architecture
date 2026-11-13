@@ -7,7 +7,7 @@ namespace OrderFlow.Application.Payments;
 /// <summary>Maps the payment aggregate to the read model returned by the use cases.</summary>
 internal static class PaymentMapper
 {
-    public static PaymentDto ToDto(Payment payment)
+    public static PaymentDto ToDto(Payment payment, bool reused = false)
     {
         ArgumentNullException.ThrowIfNull(payment);
 
@@ -20,6 +20,7 @@ internal static class PaymentMapper
             payment.Status.ToString(),
             payment.Description,
             payment.CustomerEmail,
+            payment.IdempotencyKey,
             payment.ProviderPaymentId,
             payment.ProviderStatus,
             payment.CheckoutUrl,
@@ -32,7 +33,8 @@ internal static class PaymentMapper
             payment.UpdatedAtUtc,
             payment.PaidAtUtc,
             payment.CancelledAtUtc,
-            payment.ProviderPayload);
+            payment.ProviderPayload,
+            reused);
     }
 
     private static MoneyDto ToDto(Money money) => new(money.Amount, money.Currency);

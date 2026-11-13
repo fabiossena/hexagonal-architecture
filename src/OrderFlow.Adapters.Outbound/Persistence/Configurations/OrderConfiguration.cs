@@ -21,6 +21,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasKey(order => order.Id);
         builder.Property(order => order.Id).ValueGeneratedNever();
         builder.Property(order => order.CustomerId).IsRequired();
+        builder.Property(order => order.ExternalReference).HasMaxLength(Order.MaxExternalReferenceLength);
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.CreatedAtUtc).IsRequired();
         builder.Property(order => order.CancellationReason).HasMaxLength(500);
@@ -55,5 +56,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 
             items.Navigation(item => item.UnitPrice).IsRequired();
         });
+
+        builder.HasIndex(order => order.ExternalReference);
     }
 }

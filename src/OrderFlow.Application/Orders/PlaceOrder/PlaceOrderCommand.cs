@@ -12,7 +12,9 @@ public sealed record PlaceOrderItem(string ProductName, int Quantity, decimal Un
 /// <param name="CustomerId">Customer placing the order.</param>
 /// <param name="Items">At least one line.</param>
 /// <param name="Currency">ISO-4217 currency shared by every line.</param>
+/// <param name="ExternalReference">Optional reference of the order in an external system (a quote id).</param>
 public sealed record PlaceOrderCommand(
     Guid CustomerId,
     IReadOnlyList<PlaceOrderItem> Items,
-    string Currency = Money.DefaultCurrency);
+    string Currency = Money.DefaultCurrency,
+    string? ExternalReference = null);

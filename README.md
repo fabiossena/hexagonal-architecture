@@ -28,11 +28,12 @@ persistence and test console — works **without any credential**.
 4. [Payment providers](#payment-providers)
 5. [Project layout](#project-layout)
 6. [The test console](#the-test-console)
-7. [API reference](#api-reference)
-8. [Configuration](#configuration)
-9. [Running](#running)
-10. [Tests](#tests)
-11. [Design decisions](#design-decisions)
+7. [iAppForms compatibility](#iappforms-compatibility)
+8. [API reference](#api-reference)
+9. [Configuration](#configuration)
+10. [Running](#running)
+11. [Tests](#tests)
+12. [Design decisions](#design-decisions)
 
 ---
 
@@ -199,10 +200,12 @@ orderflow/
 │   ├── OrderFlow.Application/       # use cases, DTOs, outbound ports
 │   ├── OrderFlow.Adapters.Inbound/  # controllers, contracts, problem-details mapping
 │   ├── OrderFlow.Adapters.Outbound/ # EF Core + PostgreSQL, providers, migrations
+│   ├── OrderFlow.Integration.IAppForms/ # iAppForms compatibility surface (anti-corruption)
 │   └── OrderFlow.Api/               # composition root (Program.cs), appsettings, test console
 └── tests/
     ├── OrderFlow.Domain.Tests/      # 97 tests
-    └── OrderFlow.Application.Tests/ # 44 tests
+    ├── OrderFlow.Application.Tests/ # 44 tests
+    └── OrderFlow.Integration.IAppForms.Tests/ # 37 tests
 ```
 
 | Layer | May depend on | Contains |
@@ -211,6 +214,7 @@ orderflow/
 | Application | Domain | `CreatePaymentUseCase`, `GetPaymentUseCase`, `ListPaymentsUseCase`, `RefundPaymentUseCase`, `CancelPaymentUseCase`, `RefreshPaymentStatusUseCase`, `ListPaymentProvidersUseCase`, `ApplyProviderCallbackUseCase`, `IPaymentRepository`, `IPaymentProvider`, `IPaymentProviderResolver`, `IUnitOfWork`, `IClock`, DTOs |
 | Adapters.Inbound | Application, Domain | `PaymentsController`, `ProvidersController`, `ProviderWebhookController`, request contracts, `DomainExceptionHandler` |
 | Adapters.Outbound | Application, Domain | `OrderFlowDbContext`, `PaymentRepository`, `OrderRepository`, `UnitOfWork`, `SystemClock`, `StripePaymentProvider`, `MercadoPagoPaymentProvider`, `AsaasPaymentProvider`, `SimulatedPaymentProvider`, `PaymentProviderResolver`, EF migrations |
+| Integration.IAppForms | Application, Domain | `CheckoutPaymentsController`, `CheckoutWebhookController`, `IAppFormsVocabulary`, `IAppFormsPaymentSurface`, `CheckoutExceptionHandler` — the anti-corruption layer |
 | Api | all | `Program.cs` (composition root), Swagger, health checks, `wwwroot/index.html` (test console) |
 
 ---
@@ -236,6 +240,146 @@ you get the payment test console:
 
 Nothing is hard-coded in the console: the provider list, the accepted methods
 and the "configured" flags all come from the API.
+
+The console has **two tabs**:
+
+* **Native API** — the OrderFlow endpoints (`/api/orders`, `/api/payments`).
+* **iAppForms compatibility** — the `/api/checkout/*` surface: create a quote,
+  charge it with an `Idempotency-Key`, read the status and simulate a provider
+  webhook — all in the iAppForms vocabulary.
+
+---
+
+## iAppForms compatibility
+
+The service can be used as the **payment backend of the iAppForms module**,
+without changing a single line of the iAppForms front-end.
+
+### What is exposed
+
+| Method | Route | iAppForms counterpart |
+|---|---|---|
+| `POST` | `/api/checkout/payments` | `CheckoutPaymentsController` — same route, same body, same answer |
+| `GET` | `/api/checkout/payments/{id}` | `PaymentStatusDto` |
+| `POST` | `/api/checkout/webhooks/{provider}` | `CheckoutWebhookController` |
+
+The bodies are the ones iAppForms already publishes:
+
+```jsonc
+// POST /api/checkout/payments   (header: Idempotency-Key)
+{ "quoteId": "01e75ab5-…", "paymentMethodCode": "Pix", "recurring": false }
+
+// 201 Created
+{
+  "paymentId": "8b9c168b-…",
+  "status": "InReview",          // commercial status
+  "providerStatus": "Pending",   // settlement status
+  "provider": "Simulated",
+  "checkoutUrl": null,
+  "instructions": {
+    "methodCode": "Pix",
+    "qrCodeImage": "PHN2ZyB4bWxucz0…",
+    "copyPaste": "00020126580014BR.GOV.BCB.PIX0136…",
+    "barcode": null,
+    "url": null,
+    "fields": null
+  },
+  "reused": false
+}
+```
+
+Errors keep the iAppForms shape: RFC 9457 `problem+json` with the structured
+`code` extension (`checkout.quote_not_found`, `checkout.unsupported_combination`,
+`checkout.provider_unavailable`, …).
+
+### The quote is an order
+
+iAppForms works with **quotes**; OrderFlow works with **orders**. The bridge is
+the `externalReference` of the order:
+
+1. the integration creates the order with `externalReference = quoteId`;
+2. the integration confirms it (a confirmed order is a payable one);
+3. iAppForms calls `POST /api/checkout/payments` with that `quoteId`;
+4. OrderFlow finds the order back and charges it.
+
+The amount and the currency always come from the order — the quote snapshot —
+so the two systems can never disagree about how much was charged.
+
+### The vocabulary bridge
+
+`IAppFormsVocabulary` (in `OrderFlow.Integration.IAppForms`) is the
+**anti-corruption layer**: the domain keeps its own single status and never
+learns the iAppForms tokens.
+
+| OrderFlow status | iAppForms commercial (`status`) | iAppForms provider (`providerStatus`) |
+|---|---|---|
+| `Pending` / `Processing` | `InReview` | `Pending` |
+| `Paid` | `Approved` | `Paid` |
+| `Failed` *(provider answered)* | `Rejected` | `Failed` |
+| `Failed` *(provider unreachable)* | `Error` | `Failed` |
+| `Cancelled` | `Cancelled` | `Cancelled` |
+| `Refunded` | `Approved` | `Refunded` |
+
+The method codes are the same tokens (`Pix`, `CreditCard`, `DebitCard`,
+`Boleto`) and the provider names are the same adapter names (`Stripe`,
+`MercadoPago`, `Asaas`, `Simulated`).
+
+### Safety
+
+* **Idempotency.** The `Idempotency-Key` header is stored in a **unique**
+  column. Replaying it returns the very same payment (`"reused": true`) and
+  never charges the customer twice. Reusing a key on another order is a **409**.
+* **Shared secret.** When `IAppForms:ApiKey` is set, every call must carry the
+  `X-Api-Key` header, otherwise the answer is **401**. Leave it empty only for
+  development.
+* **Provider routing** follows the iAppForms rules and is configurable
+  (`IAppForms:ProviderPreferenceByMethod`). The simulator is the last resort,
+  so the surface never fails for lack of credentials.
+
+### Pointing iAppForms at this service (the safe switch)
+
+The iAppForms module already has a provider port (`IPaymentProvider`) with
+adapters for Stripe, Mercado Pago, Asaas and a simulator. To move the payments
+here, in a safe and simple way:
+
+1. **keep** the current adapters — they are the fallback;
+2. add **one** adapter named `OrderFlow` in
+   `IAppForms.Authorization.Infrastructure/Services/Checkout/Providers/`
+   that speaks the `/api/checkout/*` surface (the DTOs are already mapped by
+   `CheckoutSurfaceContracts.cs` here);
+3. register it in `DependencyInjection.cs` and add a line to
+   `ProviderRouter.RuleProvider` — **only** for the domains you want to move;
+4. configure `Payments:Providers:OrderFlow:BaseUrl` with the URL of this
+   service and `WebhookSecret` with the `IAppForms:ApiKey` value;
+5. roll out **one domain first** and watch the reconciliation job.
+
+Nothing else changes: the plan lifecycle, the 72h confirmation window, the
+coupons and the `NotificationQueue` stay exactly where they are.
+
+### Roadmap — the advanced step (RabbitMQ)
+
+When the traffic grows, the HTTP call becomes the message:
+
+```
+iAppForms ──publish──▶ [payment.commands] ──▶ OrderFlow consumer
+                            │                        │
+                            │                   charge the PSP
+                            ▼                        │
+                       [payment.results] ◀──publish──┘
+```
+
+The pieces are already in place for that:
+
+* the command is the same `PaymentSurfaceRequest` (+ the `Idempotency-Key`);
+* the consumer would live in the same integration project
+  (`OrderFlow.Integration.IAppForms`) — it is an inbound adapter too;
+* the answer is the same `PaymentSurfaceDto` / `PaymentStatusDto`;
+* the **source of truth stays here**: the payment, the status, the provider
+  reference and the idempotency key live in OrderFlow, so the iAppForms side
+  only mirrors what it needs for the plan lifecycle.
+
+The HTTP surface can stay as the *synchronous* path while the queue handles
+the asynchronous confirmations (Pix/boleto settle later).
 
 ---
 
@@ -418,6 +562,10 @@ standard .NET convention applies: `Section__Key=value` overrides a JSON value.
 | `Payments:Asaas:Enabled` | `true` | Disables the adapter entirely when `false` |
 | `Payments:Simulated:AutoPayAfterSeconds` | `15` | Delay before a pending simulated payment is confirmed |
 | `Payments:Simulated:Enabled` | `true` | Disables the simulator when `false` |
+| `IAppForms:Enabled` | `true` | Exposes the `/api/checkout/*` compatibility surface |
+| `IAppForms:ApiKey` | *(empty)* | Shared secret expected in the `X-Api-Key` header (empty = open, development only) |
+| `IAppForms:DefaultProvider` | *(empty)* | Provider used when no preferred one is configured |
+| `IAppForms:ProviderPreferenceByMethod` | see `appsettings.json` | Provider preference per method (`Pix`, `CreditCard`, `DebitCard`, `Boleto`, `BankTransfer`) |
 | `ASPNETCORE_URLS` | `http://localhost:5080` (local) / `http://+:8080` (Docker) | Listening address |
 | `ASPNETCORE_ENVIRONMENT` | `Production` (Docker) / `Development` (local) | Enables Swagger + verbose EF logs |
 
@@ -542,6 +690,7 @@ dotnet test  OrderFlow.sln
 |---|---:|---|
 | `OrderFlow.Domain.Tests` | **97** | payment aggregate invariants (transitions, refunds, cancellation), provider/method matrix, status machine, order invariants, `Money` arithmetic, `VolumeDiscountPolicy` |
 | `OrderFlow.Application.Tests` | **44** | every payment use case with in-memory repositories, a fake provider and a fixed clock |
+| `OrderFlow.Integration.IAppForms.Tests` | **37** | the iAppForms vocabulary translation, the checkout surface (quote lookup, idempotent replay, webhook) and the API-key guard |
 
 The application tests prove the port abstraction: no database, no HTTP server,
 **no payment provider** and no test containers are required.

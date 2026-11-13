@@ -5,6 +5,7 @@
     <ProjectReference Include="..\OrderFlow.Application\OrderFlow.Application.csproj" />
     <ProjectReference Include="..\OrderFlow.Adapters.Inbound\OrderFlow.Adapters.Inbound.csproj" />
     <ProjectReference Include="..\OrderFlow.Adapters.Outbound\OrderFlow.Adapters.Outbound.csproj" />
+    <ProjectReference Include="..\OrderFlow.Integration.IAppForms\OrderFlow.Integration.IAppForms.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -43,12 +43,18 @@ namespace OrderFlow.Adapters.Outbound.Persistence.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExternalReference");
 
                     b.ToTable("orders", (string)null);
                 });
@@ -80,6 +86,10 @@ namespace OrderFlow.Adapters.Outbound.Persistence.Migrations
                     b.Property<string>("FailureReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Method")
                         .IsRequired()
@@ -128,6 +138,10 @@ namespace OrderFlow.Adapters.Outbound.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.HasIndex("OrderId");
 

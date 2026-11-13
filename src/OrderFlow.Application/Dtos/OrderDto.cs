@@ -3,6 +3,7 @@ namespace OrderFlow.Application.Dtos;
 /// <summary>Read model returned by the order use cases.</summary>
 /// <param name="Id">Order identity.</param>
 /// <param name="CustomerId">Customer identity.</param>
+/// <param name="ExternalReference">Reference of the order in an external system (optional).</param>
 /// <param name="Status">Current status (<c>Draft</c>, <c>Confirmed</c>, <c>Cancelled</c>).</param>
 /// <param name="CreatedAtUtc">Creation instant (UTC).</param>
 /// <param name="ConfirmedAtUtc">Confirmation instant (UTC), when applicable.</param>
@@ -15,6 +16,7 @@ namespace OrderFlow.Application.Dtos;
 public sealed record OrderDto(
     Guid Id,
     Guid CustomerId,
+    string? ExternalReference,
     string Status,
     DateTime CreatedAtUtc,
     DateTime? ConfirmedAtUtc,

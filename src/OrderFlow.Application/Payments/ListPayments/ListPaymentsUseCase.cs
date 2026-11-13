@@ -57,7 +57,7 @@ public sealed class ListPaymentsUseCase
             cancellationToken);
 
         return new PagedResult<PaymentDto>(
-            payments.Select(PaymentMapper.ToDto).ToList(),
+            payments.Select(payment => PaymentMapper.ToDto(payment)).ToList(),
             page,
             size,
             totalCount);

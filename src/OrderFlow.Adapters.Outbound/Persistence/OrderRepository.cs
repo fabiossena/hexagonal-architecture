@@ -34,6 +34,23 @@ public sealed class OrderRepository : IOrderRepository
     }
 
     /// <inheritdoc />
+    public async Task<Order?> GetByExternalReferenceAsync(
+        string externalReference,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(externalReference))
+        {
+            return null;
+        }
+
+        var normalized = externalReference.Trim();
+
+        return await _dbContext.Orders
+            .Include(order => order.Items)
+            .FirstOrDefaultAsync(order => order.ExternalReference == normalized, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Order>> ListAsync(
         OrderStatus? status,
         int skip,

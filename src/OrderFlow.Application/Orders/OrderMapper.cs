@@ -16,6 +16,7 @@ internal static class OrderMapper
         return new OrderDto(
             order.Id,
             order.CustomerId,
+            order.ExternalReference,
             order.Status.ToString(),
             order.CreatedAtUtc,
             order.ConfirmedAtUtc,

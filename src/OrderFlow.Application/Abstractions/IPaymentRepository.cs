@@ -28,6 +28,12 @@ public interface IPaymentRepository
     /// <returns>The payment, or <c>null</c> when it does not exist.</returns>
     Task<Payment?> GetByProviderPaymentIdAsync(string providerPaymentId, CancellationToken cancellationToken);
 
+    /// <summary>Loads a payment by the idempotency key that created it.</summary>
+    /// <param name="idempotencyKey">Idempotency key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The payment, or <c>null</c> when it does not exist.</returns>
+    Task<Payment?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken);
+
     /// <summary>Lists payments, newest first.</summary>
     /// <param name="orderId">Optional order filter.</param>
     /// <param name="provider">Optional provider filter.</param>

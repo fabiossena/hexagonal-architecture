@@ -71,6 +71,23 @@ public sealed class CreatePaymentUseCase
         var order = await _orders.GetByIdAsync(command.OrderId, cancellationToken)
             ?? throw new OrderNotFoundException(command.OrderId);
 
+        // Replaying an idempotency key must never charge the customer twice.
+        if (!string.IsNullOrWhiteSpace(command.IdempotencyKey))
+        {
+            var existing = await _payments.GetByIdempotencyKeyAsync(command.IdempotencyKey, cancellationToken);
+
+            if (existing is not null)
+            {
+                if (existing.OrderId != order.Id)
+                {
+                    throw new ConflictException(
+                        "The idempotency key was already used for another order.");
+                }
+
+                return PaymentMapper.ToDto(existing, reused: true);
+            }
+        }
+
         if (order.Status != OrderStatus.Confirmed)
         {
             throw new ConflictException(
@@ -105,7 +122,8 @@ public sealed class CreatePaymentUseCase
             amount,
             description,
             command.CustomerEmail,
-            nowUtc);
+            nowUtc,
+            command.IdempotencyKey);
 
         var request = new ProviderChargeRequest(
             order.Id,

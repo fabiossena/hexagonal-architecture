@@ -30,6 +30,14 @@ internal sealed class InMemoryPaymentRepository : IPaymentRepository
             payment => payment.ProviderPaymentId == providerPaymentId));
     }
 
+    public Task<Payment?> GetByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_payments.SingleOrDefault(
+            payment => payment.IdempotencyKey == idempotencyKey));
+    }
+
     public Task<IReadOnlyList<Payment>> ListAsync(
         Guid? orderId,
         PaymentProvider? provider,

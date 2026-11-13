@@ -1,0 +1,30 @@
+# ===========================================================================
+# Runtime-only image (offline / restricted-network verification).
+#
+# The production `/Dockerfile` runs `dotnet restore/publish` inside the build
+# stage. When the .NET SDK image cannot be pulled (offline environment, registry
+# outage), publish on the host and assemble an identical runtime image:
+#
+#   dotnet publish src/OrderFlow.Api -c Release -o publish
+#   docker build --pull=false -f Dockerfile.runtime -t orderflow/api:1.0.0 .
+#   docker compose up -d --no-build
+#
+# The resulting container behaves exactly like the multi-stage build: same
+# binaries, same entry point, same port, same health endpoint.
+# ===========================================================================
+ARG ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:8.0
+FROM ${ASPNET_IMAGE}
+
+WORKDIR /app
+
+COPY publish/ ./
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_ENVIRONMENT=Development
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
+
+ENTRYPOINT ["dotnet", "OrderFlow.Api.dll"]

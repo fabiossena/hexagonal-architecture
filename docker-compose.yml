@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# OrderFlow — local stack (PostgreSQL + API).
+#
+#   docker compose up --build
+#
+# Then open:
+#   Test console . http://localhost:8080
+#   API ........... http://localhost:8080
+#   Swagger ....... http://localhost:8080/swagger
+#   Health ........ http://localhost:8080/health
+#   PostgreSQL .... localhost:5432 (orderflow / orderflow)
+#
+# Payment provider credentials are optional: the built-in simulator works
+# without them. Export the keys to enable the real providers:
+#
+#   STRIPE_API_KEY=sk_test_... \
+#   MERCADOPAGO_ACCESS_TOKEN=APP_USR-... \
+#   ASAAS_ACCESS_KEY=$sandbox_access_token_... \
+#   docker compose up --build
+# ---------------------------------------------------------------------------
+name: orderflow
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: orderflow-postgres
+    environment:
+      POSTGRES_USER: orderflow
+      POSTGRES_PASSWORD: orderflow
+      POSTGRES_DB: orderflow
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - orderflow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orderflow -d orderflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: orderflow/api:1.0.0
+    container_name: orderflow-api
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Orders: Host=postgres;Port=5432;Database=orderflow;Username=orderflow;Password=orderflow
+      Payments__CallbackUrl: "http://localhost:${API_PORT:-8080}/api/webhooks"
+      Payments__Stripe__ApiKey: "${STRIPE_API_KEY:-}"
+      Payments__Stripe__SuccessUrl: "http://localhost:${API_PORT:-8080}/payments/success"
+      Payments__Stripe__CancelUrl: "http://localhost:${API_PORT:-8080}/payments/cancel"
+      Payments__MercadoPago__AccessToken: "${MERCADOPAGO_ACCESS_TOKEN:-}"
+      Payments__MercadoPago__NotificationUrl: "http://localhost:${API_PORT:-8080}/api/webhooks/mercadopago"
+      Payments__Asaas__AccessKey: "${ASAAS_ACCESS_KEY:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  orderflow-pgdata:

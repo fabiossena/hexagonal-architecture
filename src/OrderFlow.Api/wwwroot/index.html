@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>OrderFlow — Payment Test Console</title>
+
+  <style>
+    :root {
+      --bg: #0f172a; --card: #1e293b; --line: #334155; --text: #e2e8f0;
+      --muted: #94a3b8; --accent: #38bdf8; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+      --violet: #a78bfa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    header {
+      padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .3px; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    .spacer { flex: 1; }
+    main { display: grid; gap: 14px; padding: 16px; max-width: 1500px; margin: 0 auto; }
+    @media (min-width: 1100px) { main { grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.15fr); align-items: start; } }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+    }
+    .card h2 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+      margin: 0 0 12px; font-weight: 700;
+    }
+    .card h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    input, select, textarea {
+      width: 100%; background: #0b1220; color: var(--text); border: 1px solid var(--line);
+      border-radius: 8px; padding: 9px 10px; font-size: 14px; font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    .row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; margin-bottom: 10px; }
+    .row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .providers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .provider {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer;
+      background: #0b1220; transition: border-color .15s, background .15s;
+    }
+    .provider:hover { border-color: var(--muted); }
+    .provider.active { border-color: var(--accent); background: #0c2233; }
+    .provider .name { font-weight: 650; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+    .provider .meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      border: 1px solid var(--line); background: #0b1220; color: var(--text);
+      border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+    }
+    .chip.active { background: var(--accent); color: #04202e; border-color: var(--accent); font-weight: 650; }
+    button {
+      background: var(--accent); color: #04202e; border: none; border-radius: 8px;
+      padding: 10px 14px; font-size: 14px; font-weight: 650; cursor: pointer; font-family: inherit;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); font-weight: 600; padding: 6px 10px; font-size: 12px; }
+    button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .badge {
+      font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #334155; color: var(--muted);
+      display: inline-block; font-weight: 650; letter-spacing: .02em;
+    }
+    .badge.Paid { background: #14532d; color: var(--ok); }
+    .badge.Processing { background: #1e3a8a; color: #93c5fd; }
+    .badge.Pending { background: #422006; color: var(--warn); }
+    .badge.Failed { background: #7f1d1d; color: var(--err); }
+    .badge.Cancelled { background: #3f3f46; color: #d4d4d8; }
+    .badge.Refunded { background: #4c1d95; color: var(--violet); }
+    .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; font-size: 13px; align-items: baseline; }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+    pre {
+      background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+      overflow: auto; max-height: 260px; font-size: 12px; margin: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #cbd5e1;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    tr:last-child td { border-bottom: none; }
+    .table-wrap { max-height: 380px; overflow: auto; }
+    .empty { color: var(--muted); font-size: 13px; padding: 18px 0; text-align: center; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .err-text { color: var(--err); font-size: 13px; margin-top: 10px; }
+    a { color: var(--accent); }
+    .qr { background: #fff; padding: 8px; border-radius: 8px; display: inline-block; margin-top: 8px; }
+    .qr img { display: block; width: 168px; height: 168px; image-rendering: pixelated; }
+    .copy { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--ok); word-break: break-all; }
+    .log {
+      margin-top: 12px; max-height: 190px; overflow: auto; font-size: 11.5px;
+      font-family: ui-monospace, Menlo, monospace; color: var(--muted);
+    }
+    .log div { padding: 2px 0; border-bottom: 1px solid #1e293b80; }
+    .log .ok { color: var(--ok); } .log .err { color: var(--err); }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .check input { width: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OrderFlow · Payment Test Console</h1>
+    <span class="sub">Stripe · Mercado Pago · Asaas · Simulated</span>
+    <span class="spacer"></span>
+    <span class="badge" id="api-status">connecting…</span>
+  </header>
+
+  <main>
+    <!-- ------------------------------------------------------------------ -->
+    <section class="card">
+      <h2>1 · Provider &amp; payment type</h2>
+      <div class="providers" id="providers"></div>
+
+      <label>Payment type (method)</label>
+      <div class="chips" id="methods"></div>
+
+      <h3>Charge details</h3>
+      <div class="row">
+        <div>
+          <label for="amount">Amount (BRL)</label>
+          <input id="amount" type="number" step="0.01" min="0.01" value="149.90" />
+        </div>
+        <div>
+          <label for="installments">Installments (cards)</label>
+          <input id="installments" type="number" min="1" max="12" value="1" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="email">Customer e-mail</label>
+          <input id="email" type="email" value="buyer@example.com" />
+        </div>
+        <div>
+          <label for="name">Customer name</label>
+          <input id="name" value="Test Buyer" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="document">CPF / CNPJ (Asaas, MP)</label>
+          <input id="document" placeholder="optional" />
+        </div>
+        <div>
+          <label for="cardtoken">Card token (MP, Asaas)</label>
+          <input id="cardtoken" placeholder="token from the provider SDK" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="orderid">Order id</label>
+          <input id="orderid" placeholder="create a test order below" />
+        </div>
+        <div>
+          <label for="description">Description</label>
+          <input id="description" value="OrderFlow test payment" />
+        </div>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="simulate" />
+        Simulate a provider failure (simulator only)
+      </label>
+
+      <div class="actions">
+        <button id="new-order">1 · Create &amp; confirm test order</button>
+        <button id="pay">2 · Charge test payment</button>
+        <button class="ghost" id="reload">Reload payments</button>
+      </div>
+      <div class="hint">
+        Stripe charges cards through a PaymentIntent (test token <code>pm_card_visa</code>); Pix and Boleto
+        return a Checkout URL. Mercado Pago and Asaas need their own credentials.
+      </div>
+      <div class="err-text" id="form-error"></div>
+    </section>
+
+    <!-- ------------------------------------------------------------------ -->
+    <section class="card">
+      <h2>2 · Result</h2>
+      <div id="result"><div class="empty">No payment executed yet.</div></div>
+
+      <h3>API log</h3>
+      <div class="log" id="log"></div>
+    </section>
+
+    <!-- ------------------------------------------------------------------ -->
+    <section class="card" style="grid-column: 1 / -1;">
+      <h2>3 · Payments created in this session</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th><th>Provider</th><th>Method</th><th>Amount</th>
+              <th>Provider id</th><th>Created</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="rows"><tr><td colspan="7" class="empty">Nothing yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      providers: [],
+      provider: null,
+      method: null,
+      payments: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function log(message, kind) {
+      const line = document.createElement('div');
+      if (kind) line.className = kind;
+      line.textContent = `${new Date().toLocaleTimeString()}  ${message}`;
+      const box = $('log');
+      box.prepend(line);
+      while (box.childElementCount > 60) box.removeChild(box.lastChild);
+    }
+
+    async function api(method, url, body) {
+      const started = Date.now();
+      const options = { method, headers: { 'Accept': 'application/json' } };
+      if (body !== undefined) {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let payload = null;
+      try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
+      const ms = Date.now() - started;
+
+      log(`${method} ${url} → ${response.status} (${ms} ms)`, response.ok ? 'ok' : 'err');
+      return { ok: response.ok, status: response.status, payload };
+    }
+
+    function renderProviders() {
+      const box = $('providers');
+      box.innerHTML = '';
+
+      state.providers.forEach((provider) => {
+        const element = document.createElement('div');
+        element.className = 'provider' + (state.provider === provider.provider ? ' active' : '');
+
+        const configured = provider.isConfigured;
+        const dotClass = provider.isSimulation ? 'ok' : (configured ? 'ok' : 'warn');
+        const statusText = provider.isSimulation
+          ? 'offline simulator — always available'
+          : (configured ? 'configured' : 'missing credentials');
+
+        element.innerHTML =
+          `<div class="name"><span class="dot ${dotClass}"></span>${provider.displayName}</div>` +
+          `<div class="meta">${statusText}</div>`;
+
+        element.addEventListener('click', () => selectProvider(provider.provider));
+        box.appendChild(element);
+      });
+    }
+
+    function renderMethods() {
+      const box = $('methods');
+      box.innerHTML = '';
+      const provider = state.providers.find((p) => p.provider === state.provider);
+      if (!provider) return;
+
+      provider.methods.forEach((method) => {
+        const chip = document.createElement('button');
+        chip.className = 'chip' + (state.method === method ? ' active' : '');
+        chip.textContent = method;
+        chip.addEventListener('click', () => { state.method = method; renderMethods(); });
+        box.appendChild(chip);
+      });
+    }
+
+    function selectProvider(name) {
+      state.provider = name;
+      const provider = state.providers.find((p) => p.provider === name);
+      state.method = provider && provider.methods.length ? provider.methods[0] : null;
+      renderProviders();
+      renderMethods();
+      $('form-error').textContent = '';
+    }
+
+    function renderResult(payment) {
+      const box = $('result');
+      box.innerHTML = '';
+
+      const details = document.createElement('dl');
+      details.className = 'kv';
+      const rows = [
+        ['Status', `<span class="badge ${payment.status}">${payment.status}</span>`],
+        ['Provider', payment.provider],
+        ['Method', payment.method],
+        ['Amount', `${payment.amount.amount} ${payment.amount.currency}`],
+        ['Order', payment.orderId],
+        ['Provider id', payment.providerPaymentId || '—'],
+        ['Provider status', payment.providerStatus || '—'],
+        ['Refunded', `${payment.refundedAmount.amount} ${payment.refundedAmount.currency}`],
+        ['Refundable', `${payment.refundableAmount.amount} ${payment.refundableAmount.currency}`],
+        ['Created', new Date(payment.createdAtUtc).toLocaleString()],
+        ['Paid at', payment.paidAtUtc ? new Date(payment.paidAtUtc).toLocaleString() : '—']
+      ];
+
+      if (payment.failureReason) rows.push(['Failure', `<span style="color:var(--err)">${payment.failureReason}</span>`]);
+      if (payment.checkoutUrl) rows.push(['Checkout', `<a href="${payment.checkoutUrl}" target="_blank" rel="noopener">${payment.checkoutUrl}</a>`]);
+
+      rows.forEach(([key, value]) => {
+        const dt = document.createElement('dt');
+        dt.textContent = key;
+        const dd = document.createElement('dd');
+        dd.innerHTML = value;
+        details.appendChild(dt);
+        details.appendChild(dd);
+      });
+      box.appendChild(details);
+
+      if (payment.pixCopyPasteCode) {
+        const title = document.createElement('h3');
+        title.textContent = 'Pix (BR Code)';
+        box.appendChild(title);
+
+        const code = document.createElement('div');
+        code.className = 'copy';
+        code.textContent = payment.pixCopyPasteCode;
+        box.appendChild(code);
+
+        if (payment.pixQrCodeBase64) {
+          const qr = document.createElement('div');
+          qr.className = 'qr';
+          const image = document.createElement('img');
+          image.src = `data:image/svg+xml;base64,${payment.pixQrCodeBase64}`;
+          image.alt = 'Pix QR code';
+          qr.appendChild(image);
+          box.appendChild(qr);
+        }
+      }
+
+      if (payment.providerPayload) {
+        const title = document.createElement('h3');
+        title.textContent = 'Raw provider payload';
+        box.appendChild(title);
+
+        const pre = document.createElement('pre');
+        try { pre.textContent = JSON.stringify(JSON.parse(payment.providerPayload), null, 2); }
+        catch { pre.textContent = payment.providerPayload; }
+        box.appendChild(pre);
+      }
+    }
+
+    function renderRows() {
+      const body = $('rows');
+      body.innerHTML = '';
+
+      if (!state.payments.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty">Nothing yet.</td></tr>';
+        return;
+      }
+
+      state.payments.forEach((payment) => {
+        const row = document.createElement('tr');
+
+        const status = document.createElement('td');
+        status.innerHTML = `<span class="badge ${payment.status}">${payment.status}</span>`;
+
+        const provider = document.createElement('td');
+        provider.textContent = payment.provider;
+
+        const method = document.createElement('td');
+        method.textContent = payment.method;
+
+        const amount = document.createElement('td');
+        amount.textContent = `${payment.amount.amount} ${payment.amount.currency}`;
+
+        const providerId = document.createElement('td');
+        providerId.textContent = payment.providerPaymentId || '—';
+
+        const created = document.createElement('td');
+        created.textContent = new Date(payment.createdAtUtc).toLocaleTimeString();
+
+        const actions = document.createElement('td');
+        actions.style.whiteSpace = 'nowrap';
+
+        const refresh = document.createElement('button');
+        refresh.className = 'ghost';
+        refresh.textContent = 'refresh';
+        refresh.addEventListener('click', () => refreshPayment(payment.id));
+
+        const refund = document.createElement('button');
+        refund.className = 'ghost';
+        refund.textContent = 'refund';
+        refund.addEventListener('click', () => refundPayment(payment.id));
+
+        const cancel = document.createElement('button');
+        cancel.className = 'ghost';
+        cancel.textContent = 'cancel';
+        cancel.addEventListener('click', () => cancelPayment(payment.id));
+
+        actions.append(refresh, refund, cancel);
+        row.append(status, provider, method, amount, providerId, created, actions);
+        body.appendChild(row);
+      });
+    }
+
+    async function loadProviders() {
+      const result = await api('GET', '/api/providers');
+      if (!result.ok) {
+        $('api-status').textContent = 'API unreachable';
+        $('api-status').className = 'badge Failed';
+        return;
+      }
+
+      state.providers = result.payload;
+      $('api-status').textContent = 'API connected';
+      $('api-status').className = 'badge Paid';
+
+      const preferred = state.providers.find((p) => p.isSimulation) || state.providers[0];
+      if (preferred) selectProvider(preferred.provider);
+    }
+
+    async function loadPayments() {
+      const result = await api('GET', '/api/payments?size=20');
+      if (!result.ok) return;
+      state.payments = result.payload.items || [];
+      renderRows();
+    }
+
+    async function createTestOrder() {
+      $('form-error').textContent = '';
+      const amount = Number($('amount').value) || 0;
+      const order = await api('POST', '/api/orders', {
+        customerId: crypto.randomUUID(),
+        currency: 'BRL',
+        items: [{ productName: 'Test item', quantity: 1, unitPrice: amount }]
+      });
+
+      if (!order.ok) {
+        $('form-error').textContent = `Could not create the order: ${order.payload.detail || order.payload.title}`;
+        return;
+      }
+
+      const confirm = await api('POST', `/api/orders/${order.payload.id}/confirm`);
+      if (!confirm.ok) {
+        $('form-error').textContent = `Could not confirm the order: ${confirm.payload.detail || confirm.payload.title}`;
+        return;
+      }
+
+      $('orderid').value = order.payload.id;
+      $('form-error').textContent = '';
+      log(`test order ${order.payload.id} created and confirmed`, 'ok');
+    }
+
+    async function chargePayment() {
+      $('form-error').textContent = '';
+
+      const orderId = $('orderid').value.trim();
+      if (!orderId) {
+        $('form-error').textContent = 'Create a test order first (button 1).';
+        return;
+      }
+      if (!state.provider || !state.method) {
+        $('form-error').textContent = 'Pick a provider and a payment type.';
+        return;
+      }
+
+      const body = {
+        orderId: orderId,
+        provider: state.provider,
+        method: state.method,
+        amount: Number($('amount').value),
+        description: $('description').value,
+        customerEmail: $('email').value,
+        customerName: $('name').value,
+        customerDocument: $('document').value || null,
+        cardToken: $('cardtoken').value || null,
+        installments: Number($('installments').value) || 1,
+        simulateFailure: $('simulate').checked
+      };
+
+      const result = await api('POST', '/api/payments', body);
+      if (!result.ok) {
+        const detail = result.payload.detail || result.payload.title || 'Unknown error';
+        const payload = result.payload.providerPayload
+          ? `\n\nProvider payload:\n${result.payload.providerPayload}`
+          : '';
+        $('form-error').textContent = `${result.status} — ${detail}${payload}`;
+        $('result').innerHTML = '<div class="empty">The provider call failed.</div>';
+        await loadPayments();
+        return;
+      }
+
+      renderResult(result.payload);
+      await loadPayments();
+    }
+
+    async function refreshPayment(id) {
+      const result = await api('POST', `/api/payments/${id}/refresh`);
+      if (!result.ok) {
+        $('form-error').textContent = result.payload.detail || result.payload.title;
+        return;
+      }
+      renderResult(result.payload);
+      await loadPayments();
+    }
+
+    async function refundPayment(id) {
+      const result = await api('POST', `/api/payments/${id}/refund`, {});
+      if (!result.ok) {
+        $('form-error').textContent = result.payload.detail || result.payload.title;
+        return;
+      }
+      renderResult(result.payload);
+      await loadPayments();
+    }
+
+    async function cancelPayment(id) {
+      const result = await api('POST', `/api/payments/${id}/cancel`, { reason: 'Cancelled from the test console' });
+      if (!result.ok) {
+        $('form-error').textContent = result.payload.detail || result.payload.title;
+        return;
+      }
+      renderResult(result.payload);
+      await loadPayments();
+    }
+
+    $('new-order').addEventListener('click', createTestOrder);
+    $('pay').addEventListener('click', chargePayment);
+    $('reload').addEventListener('click', loadPayments);
+
+    loadProviders().then(loadPayments);
+  </script>
+</body>
+</html>

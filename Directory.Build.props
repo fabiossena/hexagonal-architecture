@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in the solution.
+    Keeping them here guarantees the whole solution uses the same language
+    version, nullable context and XML-documentation policy.
+  -->
+  <PropertyGroup>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: missing XML comment for a publicly visible member (documented where it matters). -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>
